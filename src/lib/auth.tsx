@@ -21,23 +21,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
-      setSession(next);
-      setLoading(false);
-      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
-        queryClient.invalidateQueries();
-      }
-      if (event === "SIGNED_OUT") {
-        queryClient.clear();
-      }
-    });
+    let unsubscribe: (() => void) | undefined;
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    void (async () => {
+      try {
+        const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+          setSession(next);
+          setLoading(false);
+          if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+            queryClient.invalidateQueries();
+          }
+          if (event === "SIGNED_OUT") {
+            queryClient.clear();
+          }
+        });
+        unsubscribe = () => sub.subscription.unsubscribe();
 
-    return () => sub.subscription.unsubscribe();
+        const { data } = await supabase.auth.getSession();
+        setSession(data.session);
+      } catch (error) {
+        console.error("Supabase auth initialization failed", error);
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    return () => unsubscribe?.();
   }, [queryClient]);
 
   return (
